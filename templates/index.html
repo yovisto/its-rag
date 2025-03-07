@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head><title>RAG POC</title>
+<link rel="stylesheet" href="https://unpkg.com/chota@latest">
+<style>
+    :root {
+  --bg-color: #ffffff;
+  --bg-secondary-color: #f3f3f6;
+  --color-primary: #1e73be;
+  --color-lightGrey: #d2d6dd;
+  --color-grey: #747681;
+  --color-darkGrey: #3f4144;
+  --color-error: #d43939;
+  --color-success: #28bd14;
+  --grid-maxWidth: 120rem;
+  --grid-gutter: 2rem;
+  --font-size: 1.6rem;
+  --font-color: #333333;
+  --font-family-sans: sans-serif;
+  --font-family-mono: monaco, "Consolas", "Lucida Console", monospace;
+}
+
+body {
+    padding: 50px 50px 150px 50px;
+}
+
+img {
+    max-width:200px;
+    max-height:200px;
+}
+.thumb{
+    border: 1px solid #1e73be;
+}
+
+.row {
+    margin-top: 10px;
+}
+
+#outputheader{
+    margin-top: 30px;
+    margin-bottom: 10px;
+    display: none;
+}
+#output{
+    display: none;
+    margin-top: 10px;
+}
+
+#results{
+ margin-top: 30px;
+ padding-top: 10px:;
+}
+
+.footer {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  background-color: lightgray;
+  color: white;
+  text-align: center;
+}
+
+  </style>
+
+
+</head>
+<body>
+  
+    <h1>ITsJOINTLY POC: Retrieval Augmented Generation (RAG)</h1>
+
+    <b>Gib deine Frage ein:</b>
+    <form id="form">
+        <textarea name="prompt"></textarea> 
+        <input type="submit"/>
+    </form>
+
+    <div id="outputheader"><b>In unserer Datenbank haben wir folgende Informationen gefunden:</b></div> 
+    <div id="output" class="card">     
+    </div>
+    
+    <div id="results"></div>
+    
+
+
+    <script>
+        const linkTemplate = "https://redaktion.openeduhub.net/edu-sharing/components/render/IIDD";
+        const imgTemplate = "https://redaktion.openeduhub.net/edu-sharing/preview?nodeId=IIDD&storeProtocol=workspace&storeId=SpacesStore&dontcache=1707519231663";
+        function addResults(content){
+            
+            const resultsEl = document.getElementById('results');
+            resultsEl.style.display = "none";
+            content = content.replaceAll('<<<>>>','');
+            console.log(content);
+            const obj = JSON.parse(content);
+            var html="<b>Aus folgenden Bildungsinhalten wurde die Antwort generiert:</b><div class='row'>";
+            for (var doc in obj.results) {
+
+                const id=obj.results[doc].id;
+                const title=obj.results[doc].title;
+                const text=obj.results[doc].text;
+
+                const link = linkTemplate.replace("IIDD", id);
+                const img = imgTemplate.replace("IIDD", id);
+                html += "<div class='col'><a href='" + link + "' target='_blank'><img src='" + img + "' class='thumb'></img></a><p><a href='" + link + "' target='_blank'>" + title +"</a></p><p>" + text + "</p></div>";
+
+            }
+            html += "</div>";
+            resultsEl.innerHTML = html;
+        }
+
+        const formEl = document.getElementById('form');
+        const outputEl = document.getElementById('output');
+        const outputH = document.getElementById('outputheader');
+        outputH.style.display = "none";
+
+        let aborter = new AbortController();
+        async function run() {
+            aborter.abort();  // cancel previous request
+
+            outputEl.innerHTML = '';
+            outputH.style.display = "block";
+            aborter = new AbortController();
+            const prompt = new FormData(formEl).get('prompt');
+            try {
+                const response = await fetch(
+                    '/rag/chain', {
+                        signal: aborter.signal,
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            prompt
+                        }),
+                    }
+                );
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) { break; }
+                    
+                    console.log(value);
+                    const decoded = decoder.decode(value, {stream: true});
+                    //const decoded = decoder.decode(value);
+                    
+                    console.log("'" + decoded + "'");
+                    
+                    if (decoded.startsWith("<<<>>>")){
+                        addResults(decoded)
+                    } else if ( decoded.includes("EEEOOOFFF")){
+                        // show results
+                        const resultsEl = document.getElementById('results');
+                        resultsEl.style.display = "block";
+                        outputEl.innerHTML += decoded.replace("EEEOOOFFF","") ;
+
+                    } else {
+                        outputEl.style.display = "block";
+                        outputEl.innerHTML += decoded ;
+                    }
+                    
+
+
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+        //run();  // run on initial prompt
+        formEl.addEventListener('submit', function(event) {
+            event.preventDefault();
+            run();
+        });
+    </script>
+
+<div class="footer">
+  <p>created with <a href="https://www.wikidata.org/wiki/Q316">♥</a> for <a href="https://its.jointly.info/">ITsJOINTLY</a> by <a href="https://yovisto.com">yovisto.com</a> </p>
+  <img src="https://its.jointly.info/wp-content/uploads/sites/32/2023/09/logos_horizontal-3.svg"><br>
+  <a href="https://yovisto.com/de/impressum/">Imprint</a>
+</div>
+
+</body>
+</html>
